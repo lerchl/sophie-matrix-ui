@@ -1,0 +1,52 @@
+name: Build ARM64 container image
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: package_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Build container image
+        run: |
+          docker build \
+            --build-arg PORT=${{ vars.PORT }} \
+            --build-arg VITE_BASE_URL_RGB=${{ vars.URL_RGB }} \
+            --build-arg VITE_BASE_URL_DATA=${{ vars.URL_DATA }} \
+            -t ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:${{ env.VERSION }} \
+            -t ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:latest \
+            -f Containerfile .
+
+      - name: Push Container image
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:${{ env.VERSION }}
+          docker push ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          make_latest: true
