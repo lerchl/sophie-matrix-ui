@@ -34,7 +34,6 @@ jobs:
           docker build \
             --build-arg PORT=${{ vars.PORT }} \
             --build-arg VITE_BASE_URL_RGB=${{ vars.URL_RGB }} \
-            --build-arg VITE_BASE_URL_DATA=${{ vars.URL_DATA }} \
             -t ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:${{ env.VERSION }} \
             -t ghcr.io/${{ github.repository_owner }}/sophie-matrix-ui:latest \
             -f Containerfile .

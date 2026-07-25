@@ -13,35 +13,23 @@ export interface BlackoutWindowDto {
     override: boolean;
 }
 
-export interface ColorDto {
-    r: number;
-    g: number;
-    b: number;
+export interface SpotifyApiCredentialsViewDto {
+    id: null | string,
+    secretSet: boolean
 }
 
-export interface ColorsDto {
-    fgDefault: ColorDto;
-    fgPunctual: ColorDto;
-    fgLate: ColorDto;
-    fgTraffic: ColorDto;
+export interface ConfigurationViewDto {
+    brightness: number,
+    mode: "FULL" | "VINYL",
+    blackoutWindow: BlackoutWindowDto,
+    spotifyAuthorized: boolean,
+    spotifyApiCredentials: SpotifyApiCredentialsViewDto
 }
 
-export interface ConfigurationDto {
-    mode: 0 | 1;
-    brightness: number;
-    blackoutWindow: BlackoutWindowDto;
-    colors: ColorsDto;
+export interface ConfigurationPatchDto {
+    brightness: null | number,
+    mode: null | "FULL" | "VINYL",
+    blackoutWindow: null | BlackoutWindowDto,
+    spotifyApiCredentialsId: null | string,
+    spotifyApiCredentialsSecret: null | string
 }
-
-export interface LioDto {
-    id: string,
-    provider: string,
-    station: string,
-    line: string,
-    direction: string
-};
-
-export interface UserDto {
-    displayName: string,
-    requiresReAuth: boolean
-};
