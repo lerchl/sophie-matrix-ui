@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, type ReactNode, useRef } from "react";
 import { Disc3, ImageIcon, RefreshCw, ExternalLink, type LucideIcon, Trash2, Power, X } from "lucide-react";
-import type { ConfigurationPatchDto, ConfigurationViewDto, ErrorDto, TimeDto } from "./model";
+import type { ConfigurationPatchDto, ConfigurationViewDto, ErrorDto, TimeDto, VersionViewDto } from "./model";
+import { ServiceUpdateSection } from "./UpdateSection";
+import { BlockedOverlay, type Blocked } from "./Blocked";
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION;
 const BASE_URL_RGB = import.meta.env.VITE_BASE_URL_RGB;
-
+const BASE_URL_VERSION_TRACKER = import.meta.env.VITE_BASE_URL_VERSION_TRACKER;
 
 const DEFAULT_CONFIG: ConfigurationViewDto = {
     mode: "FULL",
@@ -42,7 +45,7 @@ type SectionProps = {
     children: ReactNode;
 };
 
-const Section = ({ number, title, children }: SectionProps) => (
+export const Section = ({ number, title, children }: SectionProps) => (
     <section className="border-2 border-black">
         <header className="flex items-baseline gap-3 border-b-2 border-black px-4 py-3">
             <span className="text-sm font-bold">{number}</span>
@@ -50,6 +53,22 @@ const Section = ({ number, title, children }: SectionProps) => (
         </header>
         <div className="p-4 flex flex-col gap-5">{children}</div>
     </section>
+);
+
+export type StatusDotProps = {
+    active: boolean;
+    warn?: boolean;
+    label: string;
+};
+
+export const StatusDot = ({ active, warn, label }: StatusDotProps) => (
+    <p className="flex items-center gap-2 text-sm font-bold">
+        <span
+            className={`inline-block w-3 h-3 border-2 border-black shrink-0 ${active ? (warn ? "bg-yellow-400" : "bg-black") : "bg-white"}`}
+            aria-hidden="true"
+        />
+        {label}
+    </p>
 );
 
 type SwitchProps = {
@@ -178,6 +197,7 @@ const AuthorizationStatus = ({ authorized }: AuthorizationStatusProps) => (
 );
 
 export const App = () => {
+    const [rgbVersion, setRgbVersion] = useState<string | undefined>(undefined);
     const [config, setConfig] = useState<ConfigurationViewDto>(DEFAULT_CONFIG);
     const [loading, setLoading] = useState<boolean>(true);
     const [secondStepShutdown, setSecondStepShutdown] = useState<boolean>(false);
@@ -206,8 +226,6 @@ export const App = () => {
         [sendConfig],
     );
 
-    // The one legitimate effect here: load the current state from the
-    // device when the page opens.
     useEffect(() => {
         (async () => {
             try {
@@ -223,16 +241,29 @@ export const App = () => {
         })();
     }, []);
 
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch(`${BASE_URL_RGB}/version`);
+
+                if (!res.ok) {
+                    throw new Error(await parseErrorMessage(res));
+                }
+
+                const versionViewDto: VersionViewDto = await res.json();
+                setRgbVersion(versionViewDto.version);
+            } catch (e) {
+                console.error("Rgb version could not be determined:", e);
+            }
+        })();
+    }, []);
+
     const [clientIdDraft, setClientIdDraft] = useState<string>("");
 
     useEffect(() => {
         setClientIdDraft(config.spotifyApiCredentials.id || "");
     }, [config])
     const [secretDraft, setSecretDraft] = useState<string>("");
-
-    // In the load effect, alongside the rest:
-    // setClientIdDraft(view.spotifyApiCredentials.id ?? "");
-    // setCredentials(view.spotifyApiCredentials);
 
     // Generic debounced single-field PATCH. Each field gets its own timer so
     // typing in one input never delays or bundles with another.
@@ -273,21 +304,13 @@ export const App = () => {
         spotifyApiCredentialsSecret: null,
     });
 
-    type StatusDotProps = {
-        active: boolean;
-        label: string;
-    };
-
-    const StatusDot = ({ active, label }: StatusDotProps) => (
-        <p className="flex items-center gap-2 text-sm font-bold">
-            <span
-                className={`inline-block w-3 h-3 border-2 border-black shrink-0 ${active ? "bg-black" : "bg-white"
-                    }`}
-                aria-hidden="true"
-            />
-            {label}
-        </p>
-    );
+    const spotifyBlocked: Blocked | null =
+        !config.spotifyApiCredentials.id || !config.spotifyApiCredentials.secretSet
+            ? {
+                title: "Spotify-Konto deaktiviert",
+                message: "Bitte zuerst die Spotify API-Zugangsdaten setzen.",
+            }
+            : null;
 
     return (
         <div className="min-h-screen w-full bg-white text-black">
@@ -362,53 +385,38 @@ export const App = () => {
                             />
                         </Section>
 
-                        <div className="relative">
-                            <div className={!config.spotifyApiCredentials.id || !config.spotifyApiCredentials.secretSet ? "blur-sm select-none pointer-events-none" : ""}>
-                                <Section number="04" title="Spotify-Konto">
-                                    <p className="text-xs text-black/60">
-                                        Für das hierdurch autorisierte Spotify-Konto, wird angezeigt, was gerade spielt.
+                        <BlockedOverlay blocked={spotifyBlocked}>
+                            <Section number="04" title="Spotify-Konto">
+                                <p className="text-xs text-black/60">
+                                    Für das hierdurch autorisierte Spotify-Konto, wird angezeigt, was gerade spielt.
+                                </p>
+
+                                <AuthorizationStatus authorized={config.spotifyAuthorized} />
+
+                                <div className="flex flex-col gap-2.5">
+                                    <a
+                                        href={`${BASE_URL_RGB}/authorize`}
+                                        className="inline-flex items-center justify-center gap-2 border-2 border-black bg-black text-white text-sm font-bold px-4 py-2.5 transition-colors hover:bg-white hover:text-black">
+                                        <RefreshCw size={15} />
+                                        {config.spotifyAuthorized ? "Erneut autorisieren" : "Autorisieren"}
+                                    </a>
+
+                                    <a
+                                        href="https://www.spotify.com/account/apps/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center gap-2 border-2 border-black text-sm font-bold px-4 py-2.5 hover:bg-black hover:text-white transition-colors"
+                                    >
+                                        Zugriff bei Spotify verwalten
+                                        <ExternalLink size={14} />
+                                    </a>
+
+                                    <p className="text-[11px] text-black/50 text-center">
+                                        Zugriff dieses Geräts kann jederzeit in Spotifys App-Berechtigungen entzogen werden.
                                     </p>
-
-                                    <AuthorizationStatus authorized={config.spotifyAuthorized} />
-
-                                    <div className="flex flex-col gap-2.5">
-                                        <a
-                                            href={`${BASE_URL_RGB}/authorize`}
-                                            className="inline-flex items-center justify-center gap-2 border-2 border-black bg-black text-white text-sm font-bold px-4 py-2.5 transition-colors hover:bg-white hover:text-black">
-                                            <RefreshCw size={15} />
-                                            {config.spotifyAuthorized ? "Erneut autorisieren" : "Autorisieren"}
-                                        </a>
-
-                                        <a
-                                            href="https://www.spotify.com/account/apps/"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center justify-center gap-2 border-2 border-black text-sm font-bold px-4 py-2.5 hover:bg-black hover:text-white transition-colors"
-                                        >
-                                            Zugriff bei Spotify verwalten
-                                            <ExternalLink size={14} />
-                                        </a>
-
-                                        <p className="text-[11px] text-black/50 text-center">
-                                            Zugriff dieses Geräts kann jederzeit in Spotifys App-Berechtigungen entzogen werden.
-                                        </p>
-                                    </div>
-                                </Section>
-                            </div>
-
-                            {(!config.spotifyApiCredentials.id || !config.spotifyApiCredentials.secretSet) && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
-                                    <div className="border-2 border-black bg-white px-6 py-4 text-center">
-                                        <p className="text-sm font-bold uppercase">
-                                            Spotify-Konto deaktiviert
-                                        </p>
-                                        <p className="mt-2 text-xs text-black/60">
-                                            Bitte zuerst die Spotify API-Zugangsdaten setzen.
-                                        </p>
-                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            </Section>
+                        </BlockedOverlay>
 
                         <Section number="05" title="Spotify API-Zugangsdaten">
                             <p className="text-xs text-black/60">
@@ -472,7 +480,10 @@ export const App = () => {
                             </div>
                         </Section>
 
-                        <Section number="06" title="Ausschalten">
+                        <ServiceUpdateSection number="06" title="Display Version" service="sophie-matrix-rgb" version={rgbVersion} baseUrlVersionTracker={BASE_URL_VERSION_TRACKER} />
+                        <ServiceUpdateSection number="07" title="Website Version" service="sophie-matrix-ui" version={APP_VERSION} baseUrlVersionTracker={BASE_URL_VERSION_TRACKER} />
+
+                        <Section number="08" title="Ausschalten">
                             <p className="text-xs text-black/60">
                                 Das Display und der Raspberry Pi teilen sich ein Netzteil. Der Pi sollte nicht einfach
                                 abgesteckt, sondern sicher heruntergefahren werden. Sobald diese Website nicht mehr

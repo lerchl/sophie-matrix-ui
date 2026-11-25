@@ -33,3 +33,7 @@ export interface ConfigurationPatchDto {
     spotifyApiCredentialsId: null | string,
     spotifyApiCredentialsSecret: null | string
 }
+
+export interface VersionViewDto {
+    version: string
+}
